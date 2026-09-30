@@ -59,6 +59,10 @@ class Settings:
     google_credentials: dict[str, Any] | None
     tag: str
     cleanup_interval_seconds: int
+    fix_notification_chat_id: int | None
+    fix_notification_thread_id: int | None
+    image_upload_webhook_url: str | None
+    image_upload_secret: str | None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -71,6 +75,15 @@ class Settings:
         if not tag.startswith("#"):
             raise RuntimeError("BUG_TAG must start with #")
 
+        notification_chat = os.getenv("FIX_NOTIFICATION_CHAT_ID", "").strip()
+        notification_thread = os.getenv("FIX_NOTIFICATION_THREAD_ID", "").strip()
+        image_webhook = os.getenv("IMAGE_UPLOAD_WEBHOOK_URL", "").strip() or None
+        image_secret = os.getenv("IMAGE_UPLOAD_SECRET", "").strip() or None
+        if bool(image_webhook) != bool(image_secret):
+            raise RuntimeError(
+                "IMAGE_UPLOAD_WEBHOOK_URL and IMAGE_UPLOAD_SECRET must be set together"
+            )
+
         return cls(
             telegram_bot_token=_required("TELEGRAM_BOT_TOKEN"),
             allowed_chat_id=int(_required("ALLOWED_CHAT_ID")),
@@ -82,4 +95,12 @@ class Settings:
             google_credentials=_load_google_credentials(),
             tag=tag,
             cleanup_interval_seconds=cleanup_interval,
+            fix_notification_chat_id=(
+                int(notification_chat) if notification_chat else None
+            ),
+            fix_notification_thread_id=(
+                int(notification_thread) if notification_thread else None
+            ),
+            image_upload_webhook_url=image_webhook,
+            image_upload_secret=image_secret,
         )

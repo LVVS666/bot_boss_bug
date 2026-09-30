@@ -1,5 +1,6 @@
 import unittest
 
+from bugbot.sheets import GoogleSheetStore
 from bugbot.utils import (
     clean_description,
     is_checked,
@@ -44,6 +45,30 @@ class UtilsTests(unittest.TestCase):
         self.assertTrue(is_checked(True))
         self.assertTrue(is_checked("TRUE"))
         self.assertFalse(is_checked(False))
+
+    def test_legacy_row_migration(self) -> None:
+        message_url = "https://t.me/c/123/45"
+        row = [
+            7,
+            f'=HYPERLINK("{message_url}","Открыть фото")',
+            "Описание",
+            False,
+            "",
+            "-100123",
+            "45",
+            "photo-file-id",
+        ]
+
+        migrated = GoogleSheetStore._migrate_legacy_row(row)
+
+        self.assertEqual(
+            migrated[0],
+            f'=HYPERLINK("{message_url}","Открыть сообщение")',
+        )
+        self.assertEqual(migrated[1], "")
+        self.assertEqual(migrated[2], "Описание")
+        self.assertEqual(migrated[9], 7)
+        self.assertEqual(migrated[10], message_url)
 
 
 if __name__ == "__main__":
