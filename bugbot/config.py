@@ -27,12 +27,17 @@ def _parse_thread_ids(raw: str) -> frozenset[int]:
         ) from exc
 
 
-def _load_google_credentials() -> dict[str, Any]:
+def _load_google_credentials() -> dict[str, Any] | None:
     credentials_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
     if credentials_file:
-        return json.loads(Path(credentials_file).read_text(encoding="utf-8"))
+        path = Path(credentials_file)
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
 
-    raw = _required("GOOGLE_SERVICE_ACCOUNT_JSON")
+    raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if not raw:
+        return None
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -51,7 +56,7 @@ class Settings:
     allowed_thread_ids: frozenset[int]
     spreadsheet_id: str
     sheet_name: str | None
-    google_credentials: dict[str, Any]
+    google_credentials: dict[str, Any] | None
     tag: str
     cleanup_interval_seconds: int
 

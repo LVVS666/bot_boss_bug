@@ -24,10 +24,14 @@ logging.basicConfig(
 logger = logging.getLogger("telegram-bug-bot")
 
 settings = Settings.from_env()
-store = GoogleSheetStore(
-    credentials_info=settings.google_credentials,
-    spreadsheet_id=settings.spreadsheet_id,
-    sheet_name=settings.sheet_name,
+store = (
+    GoogleSheetStore(
+        credentials_info=settings.google_credentials,
+        spreadsheet_id=settings.spreadsheet_id,
+        sheet_name=settings.sheet_name,
+    )
+    if settings.google_credentials
+    else None
 )
 router = Router()
 
@@ -67,6 +71,13 @@ async def collect_bug(message: Message) -> None:
     if not description:
         await message.reply(
             f"Добавьте описание проблемы перед тегом {settings.tag}."
+        )
+        return
+
+    if store is None:
+        await message.reply(
+            "Google Sheets пока не настроен. Добавьте файл "
+            "<code>service-account.json</code> и перезапустите бота."
         )
         return
 
@@ -113,6 +124,9 @@ async def missing_photo(message: Message) -> None:
 
 
 async def cleanup_loop() -> None:
+    if store is None:
+        return
+
     while True:
         await asyncio.sleep(settings.cleanup_interval_seconds)
         try:
@@ -126,8 +140,14 @@ async def cleanup_loop() -> None:
 
 
 async def main() -> None:
-    await asyncio.to_thread(store.initialize)
-    logger.info("Using worksheet %s", store.sheet_name)
+    if store is not None:
+        await asyncio.to_thread(store.initialize)
+        logger.info("Using worksheet %s", store.sheet_name)
+    else:
+        logger.warning(
+            "Google credentials are missing. Setup mode is active: /where works, "
+            "but bug collection is disabled."
+        )
     if settings.allowed_thread_ids:
         logger.info("Allowed Telegram topic IDs: %s", sorted(settings.allowed_thread_ids))
     else:
