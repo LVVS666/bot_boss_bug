@@ -3,18 +3,16 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.types import Message, PhotoSize
+from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 
 from bugbot.config import Settings
-from bugbot.images import AppsScriptImageUploader, MAX_IMAGE_BYTES
 from bugbot.sheets import DuplicateMessageError, FixNotification, GoogleSheetStore
 from bugbot.utils import clean_description, telegram_message_url, topic_is_allowed
 
@@ -34,14 +32,6 @@ store = (
         sheet_name=settings.sheet_name,
     )
     if settings.google_credentials
-    else None
-)
-image_uploader = (
-    AppsScriptImageUploader(
-        settings.image_upload_webhook_url,
-        settings.image_upload_secret,
-    )
-    if settings.image_upload_webhook_url and settings.image_upload_secret
     else None
 )
 router = Router()
@@ -69,7 +59,7 @@ async def show_location(message: Message) -> None:
 
 
 @router.message(F.photo)
-async def collect_photo_bug(message: Message, bot: Bot) -> None:
+async def collect_photo_bug(message: Message) -> None:
     if not is_allowed_topic(message):
         return
 
@@ -82,21 +72,7 @@ async def collect_photo_bug(message: Message, bot: Bot) -> None:
         await message.reply(f"Добавьте описание проблемы перед тегом {settings.tag}.")
         return
 
-    photo = _best_upload_photo(message.photo)
-    photo_bytes: bytes | None = None
-    if photo and image_uploader:
-        buffer = BytesIO()
-        await bot.download(photo.file_id, destination=buffer)
-        candidate = buffer.getvalue()
-        if len(candidate) <= MAX_IMAGE_BYTES:
-            photo_bytes = candidate
-
-    await save_bug(
-        message=message,
-        description=description,
-        telegram_file_id=message.photo[-1].file_id,
-        photo_bytes=photo_bytes,
-    )
+    await save_bug(message=message, description=description)
 
 
 @router.message(F.text)
@@ -120,8 +96,6 @@ async def save_bug(
     *,
     message: Message,
     description: str,
-    telegram_file_id: str = "",
-    photo_bytes: bytes | None = None,
 ) -> None:
     if store is None:
         await message.reply(
@@ -143,7 +117,6 @@ async def save_bug(
             message_url,
             message.chat.id,
             message.message_id,
-            telegram_file_id,
         )
     except DuplicateMessageError:
         await message.reply("Эта запись уже есть в таблице.")
@@ -153,37 +126,42 @@ async def save_bug(
         await message.reply("Не удалось добавить запись в Google Sheets.")
         return
 
-    photo_saved = False
-    if photo_bytes and image_uploader:
-        try:
-            await image_uploader.insert_image(
-                image_bytes=photo_bytes,
-                spreadsheet_id=settings.spreadsheet_id,
-                sheet_name=store.sheet_name,
-                row_number=result.row_number,
-                image_key=f"{message.chat.id}:{message.message_id}",
-            )
-            photo_saved = True
-        except Exception:
-            logger.exception("Failed to insert photo into Google Sheets")
+    try:
+        await send_new_bug_notification(
+            bot=message.bot,
+            issue_id=result.issue_id,
+            description=description,
+            message_url=message_url,
+        )
+    except Exception:
+        logger.exception("Failed to send new bug notification to DEV_THREAD_ID")
 
     builder = InlineKeyboardBuilder()
     if message_url:
         builder.button(text="Открыть сообщение", url=message_url)
     reply = f"Ошибка №{result.issue_id} добавлена в реестр."
-    if telegram_file_id and not photo_saved:
-        reply += " Фотография в таблицу не добавлена."
     await message.reply(
         reply,
         reply_markup=builder.as_markup() if message_url else None,
     )
 
 
-def _best_upload_photo(photos: list[PhotoSize]) -> PhotoSize | None:
-    for photo in reversed(photos):
-        if photo.file_size is None or photo.file_size <= MAX_IMAGE_BYTES:
-            return photo
-    return None
+async def send_new_bug_notification(
+    *,
+    bot: Bot,
+    issue_id: int,
+    description: str,
+    message_url: str | None,
+) -> None:
+    text = f"<b>Добавлен новый баг №{issue_id}</b>\n\n{html.escape(description)}"
+    if message_url:
+        safe_url = html.escape(message_url, quote=True)
+        text += f'\n\n<a href="{safe_url}">Открыть исходное сообщение</a>'
+    await bot.send_message(
+        chat_id=settings.allowed_chat_id,
+        message_thread_id=settings.dev_thread_id,
+        text=text[:4096],
+    )
 
 
 async def workflow_loop(bot: Bot) -> None:
@@ -220,21 +198,12 @@ async def send_fix_notification(bot: Bot, notification: FixNotification) -> None
     if settings.fix_notification_thread_id is not None:
         thread_kwargs["message_thread_id"] = settings.fix_notification_thread_id
 
-    if notification.telegram_file_id:
-        text = _notification_text(notification, max_description_length=700)
-        await bot.send_photo(
-            chat_id=settings.fix_notification_chat_id,
-            photo=notification.telegram_file_id,
-            caption=text,
-            **thread_kwargs,
-        )
-    else:
-        text = _notification_text(notification, max_description_length=3500)
-        await bot.send_message(
-            chat_id=settings.fix_notification_chat_id,
-            text=text,
-            **thread_kwargs,
-        )
+    text = _notification_text(notification, max_description_length=3500)
+    await bot.send_message(
+        chat_id=settings.fix_notification_chat_id,
+        text=text,
+        **thread_kwargs,
+    )
 
 
 def _notification_text(
@@ -271,9 +240,6 @@ async def main() -> None:
         )
     if settings.fix_notification_chat_id is None:
         logger.warning("FIX_NOTIFICATION_CHAT_ID is empty: fix notifications are disabled")
-    if image_uploader is None:
-        logger.warning("Image uploader is not configured: photo cells will stay empty")
-
     bot = Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

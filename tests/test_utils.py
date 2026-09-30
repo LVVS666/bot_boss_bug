@@ -65,10 +65,43 @@ class UtilsTests(unittest.TestCase):
             migrated[0],
             f'=HYPERLINK("{message_url}","Открыть сообщение")',
         )
-        self.assertEqual(migrated[1], "")
-        self.assertEqual(migrated[2], "Описание")
-        self.assertEqual(migrated[9], 7)
-        self.assertEqual(migrated[10], message_url)
+        self.assertEqual(migrated[1], "Описание")
+        self.assertEqual(migrated[7], 7)
+        self.assertEqual(migrated[8], message_url)
+
+    def test_photo_layout_migration_removes_photo_column(self) -> None:
+        row = [
+            "link",
+            "photo",
+            "Описание",
+            True,
+            False,
+            "-100123",
+            "45",
+            "photo-file-id",
+            True,
+            9,
+            "https://t.me/c/123/45",
+        ]
+
+        migrated = GoogleSheetStore._migrate_photo_row(row)
+
+        self.assertEqual(len(migrated), 9)
+        self.assertEqual(migrated[0], "link")
+        self.assertEqual(migrated[1], "Описание")
+        self.assertEqual(migrated[2:4], [True, False])
+        self.assertNotIn("photo", migrated)
+        self.assertNotIn("photo-file-id", migrated)
+
+    def test_next_row_ignores_empty_checkbox_rows(self) -> None:
+        rows = [
+            ["", "Первый баг", False, False, "-100", "1", False, 1, ""],
+            ["", "Второй баг", False, False, "-100", "2", False, 2, ""],
+            ["", "", False, False],
+            ["", "", False, False],
+        ]
+
+        self.assertEqual(GoogleSheetStore._next_available_row(rows), 4)
 
 
 if __name__ == "__main__":
