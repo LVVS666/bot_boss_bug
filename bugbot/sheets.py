@@ -307,6 +307,21 @@ class GoogleSheetStore:
             self._column_width_request(3, 180),
             self._column_width_request(4, 120),
             {
+                "setDataValidation": {
+                    "range": {
+                        "sheetId": self._sheet_id,
+                        "startRowIndex": 1,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 5,
+                    },
+                    "rule": {
+                        "condition": {"type": "BOOLEAN"},
+                        "strict": True,
+                        "showCustomUi": True,
+                    },
+                }
+            },
+            {
                 "updateDimensionProperties": {
                     "range": {
                         "sheetId": self._sheet_id,

@@ -67,6 +67,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         sheet_name = os.getenv("GOOGLE_SHEET_NAME", "").strip() or None
+        allowed_chat_id = int(_required("ALLOWED_CHAT_ID"))
         cleanup_interval = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "30"))
         if cleanup_interval < 10:
             raise RuntimeError("CLEANUP_INTERVAL_SECONDS must be at least 10")
@@ -75,8 +76,13 @@ class Settings:
         if not tag.startswith("#"):
             raise RuntimeError("BUG_TAG must start with #")
 
+        testing_thread = os.getenv("TESTING_THREAD_ID", "").strip()
+        notification_thread = (
+            os.getenv("FIX_NOTIFICATION_THREAD_ID", "").strip() or testing_thread
+        )
         notification_chat = os.getenv("FIX_NOTIFICATION_CHAT_ID", "").strip()
-        notification_thread = os.getenv("FIX_NOTIFICATION_THREAD_ID", "").strip()
+        if notification_thread and not notification_chat:
+            notification_chat = str(allowed_chat_id)
         image_webhook = os.getenv("IMAGE_UPLOAD_WEBHOOK_URL", "").strip() or None
         image_secret = os.getenv("IMAGE_UPLOAD_SECRET", "").strip() or None
         if bool(image_webhook) != bool(image_secret):
@@ -86,7 +92,7 @@ class Settings:
 
         return cls(
             telegram_bot_token=_required("TELEGRAM_BOT_TOKEN"),
-            allowed_chat_id=int(_required("ALLOWED_CHAT_ID")),
+            allowed_chat_id=allowed_chat_id,
             allowed_thread_ids=_parse_thread_ids(
                 os.getenv("ALLOWED_THREAD_IDS", "")
             ),

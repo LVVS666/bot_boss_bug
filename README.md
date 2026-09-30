@@ -48,8 +48,9 @@ cp .env.example .env
 - `ALLOWED_THREAD_IDS` — ID тем `Bugs` и `Development` через запятую;
 - `GOOGLE_SPREADSHEET_ID` — ID таблицы;
 - `GOOGLE_SHEET_NAME` — имя листа или пустая строка для первого листа;
-- `FIX_NOTIFICATION_CHAT_ID` — ID чата, куда отправлять готовые к проверке баги;
-- `FIX_NOTIFICATION_THREAD_ID` — ID темы внутри целевого чата, если нужна тема;
+- `TESTING_THREAD_ID` — ID темы тестировщиков в исходной группе;
+- `FIX_NOTIFICATION_CHAT_ID` и `FIX_NOTIFICATION_THREAD_ID` — необязательная
+  замена, если уведомления нужно отправлять в другую группу или тему;
 - `CLEANUP_INTERVAL_SECONDS` — период проверки чекбоксов, минимум 10 секунд.
 
 Чтобы узнать ID группы и темы, запустите бота и отправьте `/where` в нужной
