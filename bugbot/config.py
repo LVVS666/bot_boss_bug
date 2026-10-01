@@ -55,6 +55,8 @@ class Settings:
     allowed_chat_id: int
     allowed_thread_ids: frozenset[int]
     dev_thread_id: int
+    dev_front: str | None
+    dev_back: str | None
     spreadsheet_id: str
     sheet_name: str | None
     google_credentials: dict[str, Any] | None
@@ -93,6 +95,8 @@ class Settings:
             allowed_chat_id=allowed_chat_id,
             allowed_thread_ids=allowed_thread_ids,
             dev_thread_id=int(_required("DEV_THREAD_ID")),
+            dev_front=os.getenv("DEV_FRONT", "").strip() or None,
+            dev_back=os.getenv("DEV_BACK", "").strip() or None,
             spreadsheet_id=_required("GOOGLE_SPREADSHEET_ID"),
             sheet_name=sheet_name,
             google_credentials=_load_google_credentials(),

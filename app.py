@@ -12,7 +12,12 @@ from aiogram.types import Message
 from dotenv import load_dotenv
 
 from bugbot.config import Settings
-from bugbot.sheets import DuplicateMessageError, FixNotification, GoogleSheetStore
+from bugbot.sheets import (
+    CompetenceNotification,
+    DuplicateMessageError,
+    FixNotification,
+    GoogleSheetStore,
+)
 from bugbot.utils import clean_description, telegram_message_url, topic_is_allowed
 
 
@@ -125,30 +130,12 @@ async def save_bug(
         await message.reply("Не удалось добавить запись в Google Sheets.")
         return
 
-    try:
-        await send_new_bug_notification(
-            bot=message.bot,
-            issue_id=result.issue_id,
+    await message.reply(
+        _bug_message(
+            title=f"Баг №{result.issue_id} заведен",
             description=description,
+            row_url=result.row_url,
         )
-    except Exception:
-        logger.exception("Failed to send new bug notification to DEV_THREAD_ID")
-
-    reply = f"Ошибка №{result.issue_id} добавлена в реестр."
-    await message.reply(reply)
-
-
-async def send_new_bug_notification(
-    *,
-    bot: Bot,
-    issue_id: int,
-    description: str,
-) -> None:
-    text = f"<b>Добавлен новый баг №{issue_id}</b>\n\n{html.escape(description)}"
-    await bot.send_message(
-        chat_id=settings.allowed_chat_id,
-        message_thread_id=settings.dev_thread_id,
-        text=text[:4096],
     )
 
 
@@ -159,6 +146,24 @@ async def workflow_loop(bot: Bot) -> None:
     while True:
         await asyncio.sleep(settings.cleanup_interval_seconds)
         try:
+            pending_competence = await asyncio.to_thread(
+                store.get_pending_competence_notifications
+            )
+            for notification in pending_competence:
+                try:
+                    sent = await send_competence_notification(bot, notification)
+                    if sent:
+                        await asyncio.to_thread(
+                            store.mark_competence_notification_sent,
+                            notification.source_chat_id,
+                            notification.source_message_id,
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to send competence notification for bug %s",
+                        notification.issue_id,
+                    )
+
             if settings.fix_notification_chat_id is not None:
                 pending = await asyncio.to_thread(store.get_pending_fix_notifications)
                 for notification in pending:
@@ -178,6 +183,34 @@ async def workflow_loop(bot: Bot) -> None:
             logger.exception("Checkbox workflow failed")
 
 
+async def send_competence_notification(
+    bot: Bot,
+    notification: CompetenceNotification,
+) -> bool:
+    competence = notification.competence.casefold()
+    developer = settings.dev_front if competence == "фронт" else settings.dev_back
+    if not developer:
+        variable = "DEV_FRONT" if competence == "фронт" else "DEV_BACK"
+        logger.warning(
+            "%s is empty: notification for bug %s remains pending",
+            variable,
+            notification.issue_id,
+        )
+        return False
+
+    await bot.send_message(
+        chat_id=settings.allowed_chat_id,
+        message_thread_id=settings.dev_thread_id,
+        text=_bug_message(
+            title=f"Баг №{notification.issue_id} заведен",
+            description=notification.description,
+            row_url=notification.row_url,
+            mention=developer,
+        ),
+    )
+    return True
+
+
 async def send_fix_notification(bot: Bot, notification: FixNotification) -> None:
     if settings.fix_notification_chat_id is None:
         return
@@ -186,24 +219,33 @@ async def send_fix_notification(bot: Bot, notification: FixNotification) -> None
     if settings.fix_notification_thread_id is not None:
         thread_kwargs["message_thread_id"] = settings.fix_notification_thread_id
 
-    text = _notification_text(notification, max_description_length=3500)
     await bot.send_message(
         chat_id=settings.fix_notification_chat_id,
-        text=text,
+        text=_bug_message(
+            title=f"Баг №{notification.issue_id} исправлен и готов к проверке",
+            description=notification.description,
+            row_url=notification.row_url,
+        ),
         **thread_kwargs,
     )
 
 
-def _notification_text(
-    notification: FixNotification,
+def _bug_message(
     *,
-    max_description_length: int,
+    title: str,
+    description: str,
+    row_url: str,
+    mention: str | None = None,
 ) -> str:
-    raw_description = notification.description
-    if len(raw_description) > max_description_length:
-        raw_description = raw_description[: max_description_length - 1].rstrip() + "…"
-    description = html.escape(raw_description)
-    return f"<b>Баг №{notification.issue_id} готов к проверке</b>\n\n{description}"
+    if len(description) > 3500:
+        description = description[:3499].rstrip() + "…"
+    parts = [f"<b>{html.escape(title)}</b>"]
+    if mention:
+        parts.append(html.escape(mention))
+    parts.append(html.escape(description))
+    safe_url = html.escape(row_url, quote=True)
+    parts.append(f'<a href="{safe_url}">Ссылка</a>')
+    return "\n\n".join(parts)
 
 
 async def main() -> None:
@@ -224,6 +266,10 @@ async def main() -> None:
         )
     if settings.fix_notification_chat_id is None:
         logger.warning("FIX_NOTIFICATION_CHAT_ID is empty: fix notifications are disabled")
+    if settings.dev_front is None:
+        logger.warning("DEV_FRONT is empty: frontend notifications are pending")
+    if settings.dev_back is None:
+        logger.warning("DEV_BACK is empty: backend notifications are pending")
     bot = Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

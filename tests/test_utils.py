@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 from bugbot.sheets import GoogleSheetStore
@@ -67,7 +68,7 @@ class UtilsTests(unittest.TestCase):
         )
         self.assertEqual(migrated[1], "Описание")
         self.assertEqual(migrated[2], "")
-        self.assertEqual(migrated[8], 7)
+        self.assertEqual(migrated[9], 7)
 
     def test_photo_layout_migration_removes_photo_column(self) -> None:
         row = [
@@ -86,13 +87,33 @@ class UtilsTests(unittest.TestCase):
 
         migrated = GoogleSheetStore._migrate_photo_row(row)
 
-        self.assertEqual(len(migrated), 9)
+        self.assertEqual(len(migrated), 10)
         self.assertEqual(migrated[0], "link")
         self.assertEqual(migrated[1], "Описание")
         self.assertEqual(migrated[2], "")
         self.assertEqual(migrated[3:5], [True, False])
         self.assertNotIn("photo", migrated)
         self.assertNotIn("photo-file-id", migrated)
+
+    def test_assignment_tracking_migration_preserves_workflow(self) -> None:
+        row = [
+            "link",
+            "Описание",
+            "Фронт",
+            True,
+            False,
+            "-100",
+            "1",
+            True,
+            4,
+        ]
+
+        migrated = GoogleSheetStore._migrate_pre_assignment_row(row)
+
+        self.assertEqual(
+            migrated,
+            ["link", "Описание", "Фронт", True, False, "-100", "1", False, True, 4],
+        )
 
     def test_competence_migration_preserves_workflow(self) -> None:
         row = ["link", "Описание", True, False, "-100", "1", True, 4, "url"]
@@ -101,18 +122,79 @@ class UtilsTests(unittest.TestCase):
 
         self.assertEqual(
             migrated,
-            ["link", "Описание", "", True, False, "-100", "1", True, 4],
+            ["link", "Описание", "", True, False, "-100", "1", False, True, 4],
         )
 
     def test_next_row_ignores_empty_checkbox_rows(self) -> None:
         rows = [
-            ["", "Первый баг", "", False, False, "-100", "1", False, 1],
-            ["", "Второй баг", "", False, False, "-100", "2", False, 2],
+            ["", "Первый баг", "", False, False, "-100", "1", False, False, 1],
+            ["", "Второй баг", "", False, False, "-100", "2", False, False, 2],
             ["", "", "", False, False],
             ["", "", "", False, False],
         ]
 
         self.assertEqual(GoogleSheetStore._next_available_row(rows), 4)
+
+    def test_row_url_opens_visible_bug_cells(self) -> None:
+        store = object.__new__(GoogleSheetStore)
+        store._spreadsheet_id = "sheet-id"
+        store._sheet_id = 123
+
+        self.assertEqual(
+            store._row_url(7),
+            "https://docs.google.com/spreadsheets/d/sheet-id/edit#gid=123&range=A7:E7",
+        )
+
+    def test_competence_notification_uses_assignment_flag(self) -> None:
+        store = object.__new__(GoogleSheetStore)
+        store._lock = threading.RLock()
+        store._spreadsheet_id = "sheet-id"
+        store._sheet_id = 123
+        store._read_rows = lambda: [
+            [
+                "link",
+                "Описание",
+                "Фронт",
+                False,
+                False,
+                "-100",
+                "7",
+                False,
+                False,
+                3,
+            ]
+        ]
+
+        pending = store.get_pending_competence_notifications()
+
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].competence, "Фронт")
+        self.assertEqual(pending[0].issue_id, 3)
+
+    def test_fix_notification_uses_separate_fix_flag(self) -> None:
+        store = object.__new__(GoogleSheetStore)
+        store._lock = threading.RLock()
+        store._spreadsheet_id = "sheet-id"
+        store._sheet_id = 123
+        store._read_rows = lambda: [
+            [
+                "link",
+                "Описание",
+                "Бэкенд",
+                True,
+                False,
+                "-100",
+                "7",
+                True,
+                False,
+                3,
+            ]
+        ]
+
+        pending = store.get_pending_fix_notifications()
+
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].issue_id, 3)
 
 
 if __name__ == "__main__":
