@@ -51,8 +51,8 @@ cp .env.example .env
 - `ALLOWED_CHAT_ID` — ID группы;
 - `ALLOWED_THREAD_IDS` — ровно один ID исходной темы, откуда читать `#new_bug`;
 - `DEV_THREAD_ID` — тема разработчиков для назначенных багов;
-- `DEV_FRONT` — Telegram username фронтенд-разработчика, например `@username`;
-- `DEV_BACK` — Telegram username бэкенд-разработчика, например `@username`;
+- `DEV_FRONT` — `@username` или числовой Telegram ID фронтенд-разработчика;
+- `DEV_BACK` — `@username` или числовой Telegram ID бэкенд-разработчика;
 - `TESTING_THREAD_ID` — тема тестировщиков для исправленных разработчиком багов;
 - `GOOGLE_SPREADSHEET_ID` — ID таблицы;
 - `GOOGLE_SHEET_NAME` — имя листа или пустая строка для первого листа;

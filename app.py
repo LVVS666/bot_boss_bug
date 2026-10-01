@@ -241,11 +241,18 @@ def _bug_message(
         description = description[:3499].rstrip() + "…"
     parts = [f"<b>{html.escape(title)}</b>"]
     if mention:
-        parts.append(html.escape(mention))
+        parts.append(_developer_mention(mention))
     parts.append(html.escape(description))
     safe_url = html.escape(row_url, quote=True)
     parts.append(f'<a href="{safe_url}">Ссылка</a>')
     return "\n\n".join(parts)
+
+
+def _developer_mention(value: str) -> str:
+    value = value.strip()
+    if value.isdigit():
+        return f'<a href="tg://user?id={value}">Разработчик</a>'
+    return html.escape(value)
 
 
 async def main() -> None:
