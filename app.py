@@ -279,7 +279,10 @@ async def main() -> None:
         logger.warning("DEV_BACK is empty: backend notifications are pending")
     bot = Bot(
         token=settings.telegram_bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        default=DefaultBotProperties(
+            parse_mode=ParseMode.HTML,
+            link_preview_is_disabled=True,
+        ),
     )
     await bot.delete_webhook(drop_pending_updates=False)
     dispatcher = Dispatcher()

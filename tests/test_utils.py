@@ -170,6 +170,7 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0].competence, "Фронт")
         self.assertEqual(pending[0].issue_id, 3)
+        self.assertEqual(pending[0].row_url, store._row_url(2))
 
     def test_fix_notification_uses_separate_fix_flag(self) -> None:
         store = object.__new__(GoogleSheetStore)
@@ -195,6 +196,7 @@ class UtilsTests(unittest.TestCase):
 
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0].issue_id, 3)
+        self.assertEqual(pending[0].row_url, store._row_url(2))
 
 
 if __name__ == "__main__":
