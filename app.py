@@ -9,7 +9,6 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.types import Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 
 from bugbot.config import Settings
@@ -131,19 +130,12 @@ async def save_bug(
             bot=message.bot,
             issue_id=result.issue_id,
             description=description,
-            message_url=message_url,
         )
     except Exception:
         logger.exception("Failed to send new bug notification to DEV_THREAD_ID")
 
-    builder = InlineKeyboardBuilder()
-    if message_url:
-        builder.button(text="Открыть сообщение", url=message_url)
     reply = f"Ошибка №{result.issue_id} добавлена в реестр."
-    await message.reply(
-        reply,
-        reply_markup=builder.as_markup() if message_url else None,
-    )
+    await message.reply(reply)
 
 
 async def send_new_bug_notification(
@@ -151,12 +143,8 @@ async def send_new_bug_notification(
     bot: Bot,
     issue_id: int,
     description: str,
-    message_url: str | None,
 ) -> None:
     text = f"<b>Добавлен новый баг №{issue_id}</b>\n\n{html.escape(description)}"
-    if message_url:
-        safe_url = html.escape(message_url, quote=True)
-        text += f'\n\n<a href="{safe_url}">Открыть исходное сообщение</a>'
     await bot.send_message(
         chat_id=settings.allowed_chat_id,
         message_thread_id=settings.dev_thread_id,
@@ -215,11 +203,7 @@ def _notification_text(
     if len(raw_description) > max_description_length:
         raw_description = raw_description[: max_description_length - 1].rstrip() + "…"
     description = html.escape(raw_description)
-    text = f"<b>Баг №{notification.issue_id} готов к проверке</b>\n\n{description}"
-    if notification.message_url:
-        safe_url = html.escape(notification.message_url, quote=True)
-        text += f'\n\n<a href="{safe_url}">Открыть исходное сообщение</a>'
-    return text
+    return f"<b>Баг №{notification.issue_id} готов к проверке</b>\n\n{description}"
 
 
 async def main() -> None:

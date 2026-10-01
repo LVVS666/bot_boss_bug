@@ -66,8 +66,8 @@ class UtilsTests(unittest.TestCase):
             f'=HYPERLINK("{message_url}","Открыть сообщение")',
         )
         self.assertEqual(migrated[1], "Описание")
-        self.assertEqual(migrated[7], 7)
-        self.assertEqual(migrated[8], message_url)
+        self.assertEqual(migrated[2], "")
+        self.assertEqual(migrated[8], 7)
 
     def test_photo_layout_migration_removes_photo_column(self) -> None:
         row = [
@@ -89,16 +89,27 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(len(migrated), 9)
         self.assertEqual(migrated[0], "link")
         self.assertEqual(migrated[1], "Описание")
-        self.assertEqual(migrated[2:4], [True, False])
+        self.assertEqual(migrated[2], "")
+        self.assertEqual(migrated[3:5], [True, False])
         self.assertNotIn("photo", migrated)
         self.assertNotIn("photo-file-id", migrated)
 
+    def test_competence_migration_preserves_workflow(self) -> None:
+        row = ["link", "Описание", True, False, "-100", "1", True, 4, "url"]
+
+        migrated = GoogleSheetStore._migrate_pre_competence_row(row)
+
+        self.assertEqual(
+            migrated,
+            ["link", "Описание", "", True, False, "-100", "1", True, 4],
+        )
+
     def test_next_row_ignores_empty_checkbox_rows(self) -> None:
         rows = [
-            ["", "Первый баг", False, False, "-100", "1", False, 1, ""],
-            ["", "Второй баг", False, False, "-100", "2", False, 2, ""],
-            ["", "", False, False],
-            ["", "", False, False],
+            ["", "Первый баг", "", False, False, "-100", "1", False, 1],
+            ["", "Второй баг", "", False, False, "-100", "2", False, 2],
+            ["", "", "", False, False],
+            ["", "", "", False, False],
         ]
 
         self.assertEqual(GoogleSheetStore._next_available_row(rows), 4)

@@ -15,6 +15,17 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 HEADERS = [
     "Ссылка на сообщение",
     "Описание бага",
+    "Компетенция",
+    "Подтверждение исправления",
+    "Исправлено",
+    "source_chat_id",
+    "source_message_id",
+    "fix_notification_sent",
+    "issue_id",
+]
+PRE_COMPETENCE_HEADERS = [
+    "Ссылка на сообщение",
+    "Описание бага",
     "Подтверждение исправления",
     "Исправлено",
     "source_chat_id",
@@ -58,7 +69,6 @@ class AppendResult:
 class FixNotification:
     issue_id: int
     description: str
-    message_url: str
     source_chat_id: int
     source_message_id: int
 
@@ -153,13 +163,13 @@ class GoogleSheetStore:
                         "values": [[
                             link_value,
                             self._safe_user_text(description),
+                            "",
                             False,
                             False,
                             str(chat_id),
                             str(message_id),
                             False,
                             issue_id,
-                            message_url or "",
                         ]],
                     },
                 )
@@ -172,9 +182,9 @@ class GoogleSheetStore:
         with self._lock:
             pending: list[FixNotification] = []
             for values in self._read_rows():
-                developer_confirmed = values[2] if len(values) > 2 else False
-                tester_confirmed = values[3] if len(values) > 3 else False
-                already_sent = values[6] if len(values) > 6 else False
+                developer_confirmed = values[3] if len(values) > 3 else False
+                tester_confirmed = values[4] if len(values) > 4 else False
+                already_sent = values[7] if len(values) > 7 else False
                 if (
                     is_checked(developer_confirmed)
                     and not is_checked(tester_confirmed)
@@ -182,11 +192,10 @@ class GoogleSheetStore:
                 ):
                     pending.append(
                         FixNotification(
-                            issue_id=self._safe_int(values[7] if len(values) > 7 else 0),
+                            issue_id=self._safe_int(values[8] if len(values) > 8 else 0),
                             description=str(values[1]) if len(values) > 1 else "",
-                            message_url=str(values[8]) if len(values) > 8 else "",
-                            source_chat_id=self._safe_int(values[4] if len(values) > 4 else 0),
-                            source_message_id=self._safe_int(values[5] if len(values) > 5 else 0),
+                            source_chat_id=self._safe_int(values[5] if len(values) > 5 else 0),
+                            source_message_id=self._safe_int(values[6] if len(values) > 6 else 0),
                         )
                     )
             return pending
@@ -195,15 +204,15 @@ class GoogleSheetStore:
         with self._lock:
             rows = self._read_rows()
             for row_number, values in enumerate(rows, start=2):
-                saved_chat_id = str(values[4]) if len(values) > 4 else ""
-                saved_message_id = str(values[5]) if len(values) > 5 else ""
+                saved_chat_id = str(values[5]) if len(values) > 5 else ""
+                saved_message_id = str(values[6]) if len(values) > 6 else ""
                 if saved_chat_id == str(chat_id) and saved_message_id == str(message_id):
                     (
                         self._service.spreadsheets()
                         .values()
                         .update(
                             spreadsheetId=self._spreadsheet_id,
-                            range=f"'{self._quoted_sheet_name()}'!G{row_number}",
+                            range=f"'{self._quoted_sheet_name()}'!H{row_number}",
                             valueInputOption="RAW",
                             body={"values": [[True]]},
                         )
@@ -217,9 +226,9 @@ class GoogleSheetStore:
             rows = self._read_rows()
             checked: list[tuple[int, int]] = []
             for sheet_row, values in enumerate(rows, start=2):
-                fixed_value = values[3] if len(values) > 3 else False
+                fixed_value = values[4] if len(values) > 4 else False
                 if is_checked(fixed_value):
-                    issue_id = self._safe_int(values[7] if len(values) > 7 else 0)
+                    issue_id = self._safe_int(values[8] if len(values) > 8 else 0)
                     checked.append((sheet_row, issue_id))
 
             if not checked:
@@ -249,7 +258,7 @@ class GoogleSheetStore:
             return [issue_id for _, issue_id in checked]
 
     def _ensure_layout(self) -> None:
-        header_range = f"'{self._quoted_sheet_name()}'!A1:K1"
+        header_range = f"'{self._quoted_sheet_name()}'!A1:I1"
         result = (
             self._service.spreadsheets()
             .values()
@@ -267,7 +276,12 @@ class GoogleSheetStore:
             self._write_headers()
         elif current_headers[: len(HEADERS)] == HEADERS:
             pass
-        elif current_headers[: len(PHOTO_HEADERS)] == PHOTO_HEADERS:
+        elif current_headers[: len(PRE_COMPETENCE_HEADERS)] == PRE_COMPETENCE_HEADERS:
+            self._migrate_pre_competence_layout()
+        elif (
+            len(current_headers) >= 9
+            and current_headers == PHOTO_HEADERS[: len(current_headers)]
+        ):
             self._migrate_photo_layout()
         elif current_headers[: len(LEGACY_HEADERS)] == LEGACY_HEADERS:
             self._migrate_legacy_layout()
@@ -315,7 +329,7 @@ class GoogleSheetStore:
                         "sheetId": self._sheet_id,
                         "startRowIndex": 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 4,
+                        "endColumnIndex": 5,
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -328,15 +342,37 @@ class GoogleSheetStore:
             },
             self._column_width_request(0, 180),
             self._column_width_request(1, 420),
-            self._column_width_request(2, 180),
-            self._column_width_request(3, 120),
+            self._column_width_request(2, 150),
+            self._column_width_request(3, 180),
+            self._column_width_request(4, 120),
             {
                 "setDataValidation": {
                     "range": {
                         "sheetId": self._sheet_id,
                         "startRowIndex": 1,
                         "startColumnIndex": 2,
-                        "endColumnIndex": 4,
+                        "endColumnIndex": 3,
+                    },
+                    "rule": {
+                        "condition": {
+                            "type": "ONE_OF_LIST",
+                            "values": [
+                                {"userEnteredValue": "Бэкенд"},
+                                {"userEnteredValue": "Фронт"},
+                            ],
+                        },
+                        "strict": True,
+                        "showCustomUi": True,
+                    },
+                }
+            },
+            {
+                "setDataValidation": {
+                    "range": {
+                        "sheetId": self._sheet_id,
+                        "startRowIndex": 1,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 5,
                     },
                     "rule": {
                         "condition": {"type": "BOOLEAN"},
@@ -350,11 +386,20 @@ class GoogleSheetStore:
                     "range": {
                         "sheetId": self._sheet_id,
                         "dimension": "COLUMNS",
-                        "startIndex": 4,
-                        "endIndex": 11,
+                        "startIndex": 5,
+                        "endIndex": 9,
                     },
                     "properties": {"hiddenByUser": True},
                     "fields": "hiddenByUser",
+                }
+            },
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": self._sheet_id,
+                        "gridProperties": {"columnCount": 9},
+                    },
+                    "fields": "gridProperties.columnCount",
                 }
             },
         ]
@@ -458,6 +503,70 @@ class GoogleSheetStore:
             .execute()
         )
 
+    def _migrate_pre_competence_layout(self) -> None:
+        response = (
+            self._service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=self._spreadsheet_id,
+                range=f"'{self._quoted_sheet_name()}'!A2:I",
+                valueRenderOption="FORMULA",
+            )
+            .execute()
+        )
+        migrated = [
+            self._migrate_pre_competence_row(row)
+            for row in response.get("values", [])
+            if self._pre_competence_row_has_issue(row)
+        ]
+        (
+            self._service.spreadsheets()
+            .values()
+            .clear(
+                spreadsheetId=self._spreadsheet_id,
+                range=f"'{self._quoted_sheet_name()}'!A:K",
+                body={},
+            )
+            .execute()
+        )
+        values = [HEADERS, *migrated]
+        (
+            self._service.spreadsheets()
+            .values()
+            .update(
+                spreadsheetId=self._spreadsheet_id,
+                range=f"'{self._quoted_sheet_name()}'!A1:I{len(values)}",
+                valueInputOption="USER_ENTERED",
+                body={"values": values},
+            )
+            .execute()
+        )
+
+    @staticmethod
+    def _migrate_pre_competence_row(row: list[Any]) -> list[Any]:
+        return [
+            row[0] if len(row) > 0 else "",
+            row[1] if len(row) > 1 else "",
+            "",
+            row[2] if len(row) > 2 else False,
+            row[3] if len(row) > 3 else False,
+            row[4] if len(row) > 4 else "",
+            row[5] if len(row) > 5 else "",
+            row[6] if len(row) > 6 else False,
+            row[7] if len(row) > 7 else 0,
+        ]
+
+    @staticmethod
+    def _pre_competence_row_has_issue(row: list[Any]) -> bool:
+        fields = [
+            row[0] if len(row) > 0 else "",
+            row[1] if len(row) > 1 else "",
+            row[4] if len(row) > 4 else "",
+            row[5] if len(row) > 5 else "",
+        ]
+        issue_id = GoogleSheetStore._safe_int(row[7] if len(row) > 7 else 0)
+        return issue_id > 0 or any(str(value).strip() for value in fields)
+
     @staticmethod
     def _photo_row_has_issue(row: list[Any]) -> bool:
         fields = [
@@ -484,13 +593,13 @@ class GoogleSheetStore:
         return [
             row[0] if len(row) > 0 else "",
             row[2] if len(row) > 2 else "",
+            "",
             row[3] if len(row) > 3 else False,
             row[4] if len(row) > 4 else False,
             row[5] if len(row) > 5 else "",
             row[6] if len(row) > 6 else "",
             row[8] if len(row) > 8 else False,
             row[9] if len(row) > 9 else 0,
-            row[10] if len(row) > 10 else "",
         ]
 
     @classmethod
@@ -502,13 +611,13 @@ class GoogleSheetStore:
         return [
             message_link,
             str(row[2]) if len(row) > 2 else "",
+            "",
             False,
             row[3] if len(row) > 3 else False,
             str(row[5]) if len(row) > 5 else "",
             str(row[6]) if len(row) > 6 else "",
             False,
             issue_id,
-            message_url,
         ]
 
     def _format_new_row(self, row_number: int) -> None:
@@ -520,8 +629,8 @@ class GoogleSheetStore:
                         "sheetId": self._sheet_id,
                         "startRowIndex": start_row,
                         "endRowIndex": start_row + 1,
-                        "startColumnIndex": 2,
-                        "endColumnIndex": 4,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 5,
                     },
                     "rule": {
                         "condition": {"type": "BOOLEAN"},
@@ -537,7 +646,7 @@ class GoogleSheetStore:
                         "startRowIndex": start_row,
                         "endRowIndex": start_row + 1,
                         "startColumnIndex": 0,
-                        "endColumnIndex": 4,
+                        "endColumnIndex": 5,
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -574,15 +683,15 @@ class GoogleSheetStore:
     @staticmethod
     def _is_duplicate(rows: list[list[Any]], chat_id: int, message_id: int) -> bool:
         for row in rows:
-            saved_chat_id = str(row[4]) if len(row) > 4 else ""
-            saved_message_id = str(row[5]) if len(row) > 5 else ""
+            saved_chat_id = str(row[5]) if len(row) > 5 else ""
+            saved_message_id = str(row[6]) if len(row) > 6 else ""
             if saved_chat_id == str(chat_id) and saved_message_id == str(message_id):
                 return True
         return False
 
     @classmethod
     def _next_issue_id(cls, rows: list[list[Any]]) -> int:
-        ids = [cls._safe_int(row[7]) for row in rows if len(row) > 7]
+        ids = [cls._safe_int(row[8]) for row in rows if len(row) > 8]
         return max(ids, default=0) + 1
 
     @classmethod
@@ -599,11 +708,10 @@ class GoogleSheetStore:
         fields = [
             row[0] if len(row) > 0 else "",
             row[1] if len(row) > 1 else "",
-            row[4] if len(row) > 4 else "",
             row[5] if len(row) > 5 else "",
-            row[8] if len(row) > 8 else "",
+            row[6] if len(row) > 6 else "",
         ]
-        issue_id = GoogleSheetStore._safe_int(row[7] if len(row) > 7 else 0)
+        issue_id = GoogleSheetStore._safe_int(row[8] if len(row) > 8 else 0)
         return issue_id > 0 or any(str(value).strip() for value in fields)
 
     @staticmethod
