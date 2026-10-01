@@ -73,7 +73,7 @@ class Settings:
         if cleanup_interval < 10:
             raise RuntimeError("CLEANUP_INTERVAL_SECONDS must be at least 10")
 
-        tag = os.getenv("BUG_TAG", "#new_bug").strip()
+        tag = os.getenv("BUG_TAG", "#bug").strip()
         if not tag.startswith("#"):
             raise RuntimeError("BUG_TAG must start with #")
 

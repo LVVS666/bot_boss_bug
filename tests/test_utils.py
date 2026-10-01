@@ -20,13 +20,13 @@ class UtilsTests(unittest.TestCase):
 
     def test_clean_description_removes_tag(self) -> None:
         self.assertEqual(
-            clean_description("Ошибка кнопки\n#new_bug", "#new_bug"),
+            clean_description("Ошибка кнопки\n#bug", "#bug"),
             "Ошибка кнопки",
         )
 
     def test_clean_description_is_case_insensitive(self) -> None:
         self.assertEqual(
-            clean_description("Не работает #NEW_BUG", "#new_bug"),
+            clean_description("Не работает #BUG", "#bug"),
             "Не работает",
         )
 
