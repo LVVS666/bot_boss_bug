@@ -340,11 +340,11 @@ class GoogleSheetStore:
                     "fields": "userEnteredFormat(verticalAlignment,wrapStrategy)",
                 }
             },
-            self._column_width_request(0, 180),
-            self._column_width_request(1, 420),
-            self._column_width_request(2, 150),
-            self._column_width_request(3, 180),
-            self._column_width_request(4, 120),
+            self._column_width_request(0, 85),
+            self._column_width_request(1, 180),
+            self._column_width_request(2, 80),
+            self._column_width_request(3, 105),
+            self._column_width_request(4, 70),
             {
                 "setDataValidation": {
                     "range": {
@@ -379,6 +379,18 @@ class GoogleSheetStore:
                         "strict": True,
                         "showCustomUi": True,
                     },
+                }
+            },
+            {
+                "updateDimensionProperties": {
+                    "range": {
+                        "sheetId": self._sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 5,
+                    },
+                    "properties": {"hiddenByUser": False},
+                    "fields": "hiddenByUser",
                 }
             },
             {
