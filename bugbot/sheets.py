@@ -196,7 +196,7 @@ class GoogleSheetStore:
                 raise DuplicateMessageError(chat_id, message_id)
 
             issue_id = self._next_issue_id(rows)
-            link_value = self._link_formula(message_url) if message_url else ""
+            link_value = self._link_value(message_url) if message_url else ""
             row_number = self._next_available_row(rows)
             (
                 self._service.spreadsheets()
@@ -793,7 +793,7 @@ class GoogleSheetStore:
         issue_id = cls._safe_int(row[0] if row else 0)
         old_photo = str(row[1]) if len(row) > 1 else ""
         message_url = cls._extract_hyperlink_url(old_photo)
-        message_link = cls._link_formula(message_url) if message_url else old_photo
+        message_link = cls._link_value(message_url) if message_url else old_photo
         return [
             message_link,
             str(row[2]) if len(row) > 2 else "",
@@ -926,9 +926,9 @@ class GoogleSheetStore:
         return f"'{value}" if value.startswith(("=", "+", "-", "@")) else value
 
     @staticmethod
-    def _link_formula(url: str) -> str:
-        escaped = url.replace('"', '""')
-        return f'=HYPERLINK("{escaped}","Открыть сообщение")'
+    def _link_value(url: str) -> str:
+        # A plain URL is clickable in Google Sheets and is locale-independent.
+        return url
 
     @staticmethod
     def _extract_hyperlink_url(value: str) -> str:

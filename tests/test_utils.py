@@ -64,7 +64,7 @@ class UtilsTests(unittest.TestCase):
 
         self.assertEqual(
             migrated[0],
-            f'=HYPERLINK("{message_url}","Открыть сообщение")',
+            message_url,
         )
         self.assertEqual(migrated[1], "Описание")
         self.assertEqual(migrated[2], "")
